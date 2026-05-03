@@ -31,5 +31,9 @@ export class DatabaseInitializer {
     const collection = await this.mongoDatabase.getInventarioCollection();
     await collection.createIndex({ id_producto: 1 }, { unique: true, name: 'uidx_inventario_id_producto' });
     await collection.createIndex({ tipo: 1, activo: 1 }, { name: 'idx_inventario_tipo_activo' });
+
+    const reservasCollection = await this.mongoDatabase.getReservasCollection();
+    await reservasCollection.createIndex({ id_pedido: 1 }, { unique: true, name: 'uidx_inventario_reservas_id_pedido' });
+    await reservasCollection.createIndex({ estado: 1 }, { name: 'idx_inventario_reservas_estado' });
   }
 }

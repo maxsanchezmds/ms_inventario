@@ -6,7 +6,22 @@ import { InventarioService } from './inventario.service';
 import { Producto } from './inventario.types';
 import { TrazabilidadRepository } from './trazabilidad.repository';
 
-type InventarioRepositoryMock = jest.Mocked<Pick<InventarioRepository, 'create' | 'update' | 'delete' | 'findAll' | 'findByIds'>>;
+type InventarioRepositoryMock = jest.Mocked<
+  Pick<
+    InventarioRepository,
+    | 'create'
+    | 'update'
+    | 'delete'
+    | 'findAll'
+    | 'findByIds'
+    | 'findReservaByPedido'
+    | 'createReserva'
+    | 'createRejectedReserva'
+    | 'reserveProducts'
+    | 'consumeReserva'
+    | 'releaseReserva'
+  >
+>;
 type TrazabilidadRepositoryMock = jest.Mocked<Pick<TrazabilidadRepository, 'create'>>;
 type InventarioEventPublisherMock = jest.Mocked<Pick<InventarioEventPublisher, 'publishStockAprobado' | 'publishStockRechazado'>>;
 
@@ -17,6 +32,12 @@ describe('InventarioService', () => {
     delete: jest.fn(),
     findAll: jest.fn(),
     findByIds: jest.fn(),
+    findReservaByPedido: jest.fn(),
+    createReserva: jest.fn(),
+    createRejectedReserva: jest.fn(),
+    reserveProducts: jest.fn(),
+    consumeReserva: jest.fn(),
+    releaseReserva: jest.fn(),
   };
   const trazabilidadRepository: TrazabilidadRepositoryMock = {
     create: jest.fn(),
@@ -37,6 +58,24 @@ describe('InventarioService', () => {
     });
     eventPublisher.publishStockAprobado.mockResolvedValue(undefined);
     eventPublisher.publishStockRechazado.mockResolvedValue(undefined);
+    repository.findReservaByPedido.mockResolvedValue(null);
+    repository.createReserva.mockResolvedValue({
+      id_pedido: 'pedido-1',
+      productos: [{ id_producto: 'sku-1', cantidad: 3 }],
+      estado: 'reservado',
+      fecha_creacion: new Date(),
+      fecha_actualizacion: new Date(),
+    });
+    repository.createRejectedReserva.mockResolvedValue({
+      id_pedido: 'pedido-1',
+      productos: [{ id_producto: 'sku-1', cantidad: 3 }],
+      estado: 'rechazado',
+      fecha_creacion: new Date(),
+      fecha_actualizacion: new Date(),
+    });
+    repository.reserveProducts.mockResolvedValue(undefined);
+    repository.consumeReserva.mockResolvedValue(null);
+    repository.releaseReserva.mockResolvedValue(null);
   });
 
   test('crea productos y registra trazabilidad', async () => {
@@ -111,6 +150,8 @@ describe('InventarioService', () => {
       productos: [{ id_producto: 'sku-1', cantidad: 3 }],
     });
 
+    expect(repository.createReserva).toHaveBeenCalledWith('pedido-1', [{ id_producto: 'sku-1', cantidad: 3 }], expect.any(Date));
+    expect(repository.reserveProducts).toHaveBeenCalledWith([{ id_producto: 'sku-1', cantidad: 3 }], expect.any(Date));
     expect(eventPublisher.publishStockAprobado).toHaveBeenCalledTimes(1);
     expect(eventPublisher.publishStockRechazado).not.toHaveBeenCalled();
   });
@@ -129,14 +170,34 @@ describe('InventarioService', () => {
       [
         {
           id_producto: 'sku-404',
-          cantidad_solicitada: 1,
+          cantidad: 1,
           cantidad_disponible: 0,
           aprobado: false,
           motivo: 'producto_no_existe',
         },
       ],
     );
+    expect(repository.createRejectedReserva).toHaveBeenCalledWith(
+      'pedido-1',
+      [{ id_producto: 'sku-404', cantidad: 1 }],
+      expect.any(Date),
+    );
     expect(eventPublisher.publishStockAprobado).not.toHaveBeenCalled();
   });
-});
 
+  test('consume reserva cuando llega pedido_aprobado', async () => {
+    const service = new InventarioService(repository, trazabilidadRepository, eventPublisher, validator);
+
+    await service.consumePedidoAprobado('pedido-1');
+
+    expect(repository.consumeReserva).toHaveBeenCalledWith('pedido-1', expect.any(Date));
+  });
+
+  test('libera stock reservado o consumido cuando llega cancelacion o envio_rechazado', async () => {
+    const service = new InventarioService(repository, trazabilidadRepository, eventPublisher, validator);
+
+    await service.releasePedidoStock('pedido-1');
+
+    expect(repository.releaseReserva).toHaveBeenCalledWith('pedido-1', expect.any(Date));
+  });
+});

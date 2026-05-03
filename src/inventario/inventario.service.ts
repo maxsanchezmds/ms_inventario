@@ -12,13 +12,23 @@ import {
 import { TrazabilidadRepository } from './trazabilidad.repository';
 
 type InventarioRepositoryPort = Pick<InventarioRepository, 'create' | 'update' | 'delete' | 'findAll' | 'findByIds'>;
+type InventarioStockRepositoryPort = InventarioRepositoryPort &
+  Pick<
+    InventarioRepository,
+    | 'findReservaByPedido'
+    | 'createReserva'
+    | 'createRejectedReserva'
+    | 'reserveProducts'
+    | 'consumeReserva'
+    | 'releaseReserva'
+  >;
 type TrazabilidadRepositoryPort = Pick<TrazabilidadRepository, 'create'>;
 type InventarioEventPublisherPort = Pick<InventarioEventPublisher, 'publishStockAprobado' | 'publishStockRechazado'>;
 
 @Injectable()
 export class InventarioService {
   constructor(
-    @Inject(InventarioRepository) private readonly inventarioRepository: InventarioRepositoryPort,
+    @Inject(InventarioRepository) private readonly inventarioRepository: InventarioStockRepositoryPort,
     @Inject(TrazabilidadRepository) private readonly trazabilidadRepository: TrazabilidadRepositoryPort,
     @Inject(InventarioEventPublisher) private readonly inventarioEventPublisher: InventarioEventPublisherPort,
     private readonly requestValidator: InventarioRequestValidator,
@@ -63,6 +73,16 @@ export class InventarioService {
 
   async evaluatePedidoStock(pedido: Pedido): Promise<void> {
     const productosSolicitados = this.aggregatePedidoProducts(pedido);
+    const reserva = await this.inventarioRepository.findReservaByPedido(pedido.id_pedido);
+    if (reserva) {
+      if (reserva.estado === 'reservado' || reserva.estado === 'consumido') {
+        await this.inventarioEventPublisher.publishStockAprobado(pedido, this.buildApprovedEvaluation(productosSolicitados));
+      } else if (reserva.estado === 'rechazado') {
+        await this.inventarioEventPublisher.publishStockRechazado(pedido, this.buildRejectedEvaluation(productosSolicitados));
+      }
+      return;
+    }
+
     const productos = await this.inventarioRepository.findByIds(productosSolicitados.map((producto) => producto.id_producto));
     const productosById = new Map(productos.map((producto) => [producto.id_producto, producto]));
 
@@ -76,7 +96,7 @@ export class InventarioService {
 
       return {
         id_producto: productoSolicitado.id_producto,
-        cantidad_solicitada: productoSolicitado.cantidad,
+        cantidad: productoSolicitado.cantidad,
         cantidad_disponible: cantidadDisponible,
         aprobado,
         ...(aprobado
@@ -86,11 +106,23 @@ export class InventarioService {
     }) satisfies StockEvaluadoEvent['productos'];
 
     if (evaluacion.every((producto) => producto.aprobado)) {
+      const now = new Date();
+      await this.inventarioRepository.createReserva(pedido.id_pedido, productosSolicitados, now);
+      await this.inventarioRepository.reserveProducts(productosSolicitados, now);
       await this.inventarioEventPublisher.publishStockAprobado(pedido, evaluacion);
       return;
     }
 
+    await this.inventarioRepository.createRejectedReserva(pedido.id_pedido, productosSolicitados, new Date());
     await this.inventarioEventPublisher.publishStockRechazado(pedido, evaluacion);
+  }
+
+  async consumePedidoAprobado(idPedido: string): Promise<void> {
+    await this.inventarioRepository.consumeReserva(idPedido, new Date());
+  }
+
+  async releasePedidoStock(idPedido: string): Promise<void> {
+    await this.inventarioRepository.releaseReserva(idPedido, new Date());
   }
 
   private aggregatePedidoProducts(pedido: Pedido): Pedido['productos'] {
@@ -102,5 +134,24 @@ export class InventarioService {
     }
 
     return [...quantitiesByProduct.entries()].map(([id_producto, cantidad]) => ({ id_producto, cantidad }));
+  }
+
+  private buildApprovedEvaluation(productos: Pedido['productos']): StockEvaluadoEvent['productos'] {
+    return productos.map((producto) => ({
+      id_producto: producto.id_producto,
+      cantidad: producto.cantidad,
+      cantidad_disponible: 0,
+      aprobado: true,
+    }));
+  }
+
+  private buildRejectedEvaluation(productos: Pedido['productos']): StockEvaluadoEvent['productos'] {
+    return productos.map((producto) => ({
+      id_producto: producto.id_producto,
+      cantidad: producto.cantidad,
+      cantidad_disponible: 0,
+      aprobado: false,
+      motivo: 'stock_insuficiente',
+    }));
   }
 }
