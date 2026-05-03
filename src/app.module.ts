@@ -8,7 +8,7 @@ import { InventarioRequestValidator } from './inventario/inventario-request-vali
 import { InventarioRepository } from './inventario/inventario.repository';
 import { InventarioService } from './inventario/inventario.service';
 import { MongoDatabase } from './inventario/mongo-database';
-import { PedidoCreadoConsumer } from './inventario/pedido-creado.consumer';
+import { InventarioEventsConsumer } from './inventario/inventario-events.consumer';
 import { TrazabilidadRepository } from './inventario/trazabilidad.repository';
 
 @Module({
@@ -22,7 +22,7 @@ import { TrazabilidadRepository } from './inventario/trazabilidad.repository';
     InventarioEventPublisher,
     InventarioRequestValidator,
     InventarioService,
-    PedidoCreadoConsumer,
+    InventarioEventsConsumer,
   ],
 })
 export class AppModule {}

@@ -12,15 +12,17 @@ Microservicio de inventario Smartlogix.
 
 ## Persistencia
 
-- MongoDB: coleccion `inventario`, con documentos flexibles para productos de cualquier tipo.
+- MongoDB: coleccion `inventario`, con documentos flexibles para productos de cualquier tipo, y `inventario_reservas` para reservas por pedido.
 - PostgreSQL: tabla `inventario_trazabilidad` con `id_trazabilidad`, `fecha_hora`, `id_producto` y `nombre_responsable`.
 
 ## Eventos
 
-Consume `pedido_creado` desde SQS. Para cada pedido valida existencia, estado activo y stock disponible de los productos:
+Consume `pedido_creado`, `pedido_aprobado`, `pedido_cancelado` y `envio_rechazado` desde SQS. Para cada pedido creado valida existencia, estado activo y stock disponible de los productos:
 
-- Publica `stock_aprobado` cuando todos los productos tienen stock suficiente.
+- Reserva stock y publica `stock_aprobado` cuando todos los productos tienen stock suficiente.
 - Publica `stock_rechazado` cuando falta un producto, esta inactivo o no hay stock suficiente.
+- Consume la reserva con `pedido_aprobado`.
+- Libera stock con `pedido_cancelado` o `envio_rechazado`.
 
 ## Variables de entorno
 

@@ -62,10 +62,13 @@ export interface Pedido {
   productos: PedidoProducto[];
 }
 
-export interface PedidoCreadoEvent {
-  evento: 'pedido_creado';
-  pedido: Pedido;
+export interface PedidoEvent {
+  evento: 'pedido_creado' | 'pedido_aprobado' | 'pedido_cancelado' | 'envio_rechazado';
+  pedido?: Pedido;
+  id_pedido?: unknown;
 }
+
+export type PedidoCreadoEvent = PedidoEvent;
 
 export interface StockEvaluadoEvent {
   evento: 'stock_aprobado' | 'stock_rechazado';
@@ -73,10 +76,24 @@ export interface StockEvaluadoEvent {
   pedido: Pedido;
   productos: Array<{
     id_producto: string;
-    cantidad_solicitada: number;
+    cantidad: number;
     cantidad_disponible: number;
     aprobado: boolean;
     motivo?: string;
   }>;
 }
 
+export type ReservaInventarioEstado = 'reservado' | 'consumido' | 'liberado' | 'rechazado';
+
+export interface ReservaInventarioProducto {
+  id_producto: string;
+  cantidad: number;
+}
+
+export interface ReservaInventario {
+  id_pedido: string;
+  productos: ReservaInventarioProducto[];
+  estado: ReservaInventarioEstado;
+  fecha_creacion: Date;
+  fecha_actualizacion: Date;
+}
